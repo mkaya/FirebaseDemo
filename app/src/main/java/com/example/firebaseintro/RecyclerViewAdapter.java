@@ -48,10 +48,10 @@ public class RecyclerViewAdapter extends RecyclerView.Adapter< RecyclerViewAdapt
     FirebaseDatabase database = FirebaseDatabase.getInstance();
     DatabaseReference allPostsRef = database.getReference("Posts");
     ChildEventListener usersRefListener;
-    private FirebaseAuth mAuth;
-    private FirebaseUser currentUser;
-    private List<PostModel> postsList;
-    private RecyclerView r;
+    private final FirebaseAuth mAuth;
+    private final FirebaseUser currentUser;
+    private final List<PostModel> postsList;
+    private final RecyclerView r;
 
     public RecyclerViewAdapter(RecyclerView recyclerView){
         postsList =new ArrayList<>();
@@ -70,22 +70,18 @@ public class RecyclerViewAdapter extends RecyclerView.Adapter< RecyclerViewAdapt
                 RecyclerViewAdapter.this.notifyItemInserted(postsList.size()-1);
                 r.scrollToPosition(postsList.size()-1);
             }
-
             @Override
             public void onChildChanged(@NonNull DataSnapshot snapshot, @Nullable String previousChildName) {
 
             }
-
             @Override
             public void onChildRemoved(@NonNull DataSnapshot snapshot) {
 
             }
-
             @Override
             public void onChildMoved(@NonNull DataSnapshot snapshot, @Nullable String previousChildName) {
 
             }
-
             @Override
             public void onCancelled(@NonNull DatabaseError error) {
 
@@ -93,7 +89,6 @@ public class RecyclerViewAdapter extends RecyclerView.Adapter< RecyclerViewAdapt
         });
 
     }
-
     @NonNull
     @Override
     public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
@@ -101,7 +96,6 @@ public class RecyclerViewAdapter extends RecyclerView.Adapter< RecyclerViewAdapt
         final ViewHolder vh = new ViewHolder(v);
         return vh;
     }
-
     @Override
     public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
         final PostModel u =postsList.get(position);
@@ -234,10 +228,10 @@ public class RecyclerViewAdapter extends RecyclerView.Adapter< RecyclerViewAdapt
         ValueEventListener likesRefListener;
         public ViewHolder(View v){
             super(v);
-            fname_v = (TextView) v.findViewById(R.id.fname_view);
-            email_v = (TextView) v.findViewById(R.id.email_view);
-            phone_v = (TextView) v.findViewById(R.id.phone_view);
-            date_v = (TextView) v.findViewById(R.id.date_view);
+            fname_v = v.findViewById(R.id.fname_view);
+            email_v = v.findViewById(R.id.email_view);
+            phone_v = v.findViewById(R.id.phone_view);
+            date_v = v.findViewById(R.id.date_view);
             description_v=v.findViewById(R.id.description);
             imageView=v.findViewById(R.id.postImg);
             likeBtn=v.findViewById(R.id.likeBtn);

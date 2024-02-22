@@ -24,7 +24,6 @@ public class LoginSignup extends AppCompatActivity {
     private FirebaseAuth mAuth;
     private FirebaseUser currentUser;
     Button signupBtn;
-
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -72,7 +71,6 @@ public class LoginSignup extends AppCompatActivity {
             }
         });
     }
-
     public void sendEmailVerification(View view) {
         if(mAuth.getCurrentUser()==null){
             Toast.makeText(this, "Please login first to resend verification email.", Toast.LENGTH_SHORT).show();
@@ -92,7 +90,6 @@ public class LoginSignup extends AppCompatActivity {
                     }
                 });
     }
-
     public void Login(View view) {
         if(email.getText().toString().equals("")|| password.getText().toString().equals("")){
             Toast.makeText(this, "Please provide all information", Toast.LENGTH_SHORT).show();
@@ -125,7 +122,6 @@ public class LoginSignup extends AppCompatActivity {
                     }
                 });
     }
-
     public void Signup(View view) {
         if(email.getText().toString().equals("")|| password.getText().toString().equals("")
                 || phonenumber.getText().toString().equals("")|| displayname.getText().toString().equals("")){
@@ -145,7 +141,7 @@ public class LoginSignup extends AppCompatActivity {
                         currentUser.sendEmailVerification().addOnSuccessListener(LoginSignup.this, new OnSuccessListener<Void>() {
                             @Override
                             public void onSuccess(Void aVoid) {
-                                Toast.makeText(LoginSignup.this, "Signup successful. Verification email Setn!", Toast.LENGTH_SHORT).show();
+                                Toast.makeText(LoginSignup.this, "Signup successful. Verification email Sent!", Toast.LENGTH_SHORT).show();
                                 saveUserDataToDB();
                                 updateUI();
                             }
