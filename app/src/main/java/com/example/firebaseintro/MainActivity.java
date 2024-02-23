@@ -41,7 +41,8 @@ public class MainActivity extends AppCompatActivity {
                     }
                     else{
                         Toast.makeText(MainActivity.this, "Please verify your email and login.", Toast.LENGTH_SHORT).show();
-                        startActivity(new Intent(MainActivity.this, LoginSignup.class));
+                        // startActivity(new Intent(MainActivity.this, LoginSignup.class));
+                        startActivity(new Intent(MainActivity.this, UserHome.class)); // Remove this and uncomment above to require email verification.
                         finish();
                     }
                 }

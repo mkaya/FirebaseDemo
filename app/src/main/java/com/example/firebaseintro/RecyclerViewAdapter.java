@@ -12,6 +12,8 @@ import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.google.android.gms.maps.model.BitmapDescriptorFactory;
+import com.google.android.gms.maps.model.Marker;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.database.ChildEventListener;
@@ -27,67 +29,23 @@ import com.squareup.picasso.Picasso;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 
 public class RecyclerViewAdapter extends RecyclerView.Adapter< RecyclerViewAdapter.ViewHolder> {
-    SimpleDateFormat localDateFormat= new SimpleDateFormat("dd-MM-yyyy HH:mm:ss");
-    private class PostModel{
-        public String postKey;
-        public String uid;
-        public String description;
-        public String url;
-        public String date;
-        public PostModel(String uid, String description, String url, String date, String key) {
-            this.uid=uid;
-            this.description=description;
-            this.url=url;
-            this.date=date;
-            this.postKey=key;
-        }
-    }
-    FirebaseDatabase database = FirebaseDatabase.getInstance();
-    DatabaseReference allPostsRef = database.getReference("Posts");
     ChildEventListener usersRefListener;
-    private final FirebaseAuth mAuth;
     private final FirebaseUser currentUser;
-    private final List<PostModel> postsList;
-    private final RecyclerView r;
+    private final List<String> keyList;
+    private final HashMap<String,PostModel> key_to_Post;
+    private Marker currentMarker =null;
+    private  ItemClickListener itemClickListener;
 
-    public RecyclerViewAdapter(RecyclerView recyclerView){
-        postsList =new ArrayList<>();
-        r=recyclerView;
-        mAuth = FirebaseAuth.getInstance();
+    public RecyclerViewAdapter(HashMap<String,PostModel> kp, List<String> kl, ItemClickListener _itemClickListener){
+        keyList=kl;
+        itemClickListener =_itemClickListener;
+        key_to_Post= kp;
+        FirebaseAuth mAuth = FirebaseAuth.getInstance();
         currentUser = mAuth.getCurrentUser();
-        allPostsRef.addChildEventListener(new ChildEventListener() {
-            @Override
-            public void onChildAdded(@NonNull DataSnapshot dataSnapshot, @Nullable String previousChildName) {
-                PostModel postModel=new PostModel(dataSnapshot.child("uid").getValue().toString(),
-                        dataSnapshot.child("description").getValue().toString(),
-                        dataSnapshot.child("url").getValue().toString(),
-                        localDateFormat.format(new Date(Long.parseLong(dataSnapshot.child("timestamp").getValue().toString()))) ,
-                        dataSnapshot.getKey());
-                postsList.add(postModel);
-                RecyclerViewAdapter.this.notifyItemInserted(postsList.size()-1);
-                r.scrollToPosition(postsList.size()-1);
-            }
-            @Override
-            public void onChildChanged(@NonNull DataSnapshot snapshot, @Nullable String previousChildName) {
-
-            }
-            @Override
-            public void onChildRemoved(@NonNull DataSnapshot snapshot) {
-
-            }
-            @Override
-            public void onChildMoved(@NonNull DataSnapshot snapshot, @Nullable String previousChildName) {
-
-            }
-            @Override
-            public void onCancelled(@NonNull DatabaseError error) {
-
-            }
-        });
-
     }
     @NonNull
     @Override
@@ -98,7 +56,7 @@ public class RecyclerViewAdapter extends RecyclerView.Adapter< RecyclerViewAdapt
     }
     @Override
     public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
-        final PostModel u =postsList.get(position);
+        final PostModel u =key_to_Post.get(keyList.get(position));
         String uid=u.uid;
         if(holder.uref!=null && holder.urefListener!=null)
         {
@@ -122,6 +80,11 @@ public class RecyclerViewAdapter extends RecyclerView.Adapter< RecyclerViewAdapt
                 holder.email_v.setText("Email:  " + dataSnapshot.child("email").getValue().toString());
                 holder.phone_v.setText("Phone Num:  " + dataSnapshot.child("phone").getValue().toString());
                 holder.date_v.setText("Date Created: "+u.date);
+                if (dataSnapshot.child("profilePicture").exists()) {
+                    Picasso.get().load(dataSnapshot.child("profilePicture").getValue().toString())
+                            .transform(new CircleTransform()).into(holder.profileImage);
+                    holder.profileImage.setVisibility(View.VISIBLE);
+                }
             }
 
             @Override
@@ -130,7 +93,7 @@ public class RecyclerViewAdapter extends RecyclerView.Adapter< RecyclerViewAdapt
             }
         });
         holder.likeCountRef=
-                database.getReference("Posts/"+u.postKey+"/likeCount");
+                database.getReference("ImagePosts/"+u.postKey+"/likeCount");
         Log.d("LIKEC ", u.postKey);
         holder.likeCountRefListener = holder.likeCountRef.addValueEventListener(new ValueEventListener() {
             @Override
@@ -145,16 +108,16 @@ public class RecyclerViewAdapter extends RecyclerView.Adapter< RecyclerViewAdapt
 
             }
         });
-        holder.likesRef=database.getReference("Posts/"+u.postKey+"/likes/"+currentUser.getUid());
+        holder.likesRef=database.getReference("ImagePosts/"+u.postKey+"/likes/"+currentUser.getUid());
         holder.likesRefListener=holder.likesRef.addValueEventListener(new ValueEventListener() {
             @Override
             public void onDataChange(@NonNull DataSnapshot dataSnapshot) {
                 if(dataSnapshot.exists() && dataSnapshot.getValue().toString().equals("true"))
                 {
-                    holder.likeBtn.setImageDrawable(ContextCompat.getDrawable(r.getContext(), R.drawable.like_active));
+                    holder.likeBtn.setImageDrawable(ContextCompat.getDrawable(holder.likeBtn.getContext(), R.drawable.like_active));
                 }
                 else{
-                    holder.likeBtn.setImageDrawable(ContextCompat.getDrawable(r.getContext(), R.drawable.like_disabled));
+                    holder.likeBtn.setImageDrawable(ContextCompat.getDrawable(holder.likeBtn.getContext(), R.drawable.like_disabled));
                 }
 
             }
@@ -167,7 +130,7 @@ public class RecyclerViewAdapter extends RecyclerView.Adapter< RecyclerViewAdapt
         holder.likeBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                database.getReference("Posts/"+u.postKey).runTransaction(new Transaction.Handler() {
+                database.getReference("ImagePosts/"+u.postKey).runTransaction(new Transaction.Handler() {
                     @NonNull
                     @Override
                     public Transaction.Result doTransaction(@NonNull MutableData mutableData) {
@@ -199,15 +162,22 @@ public class RecyclerViewAdapter extends RecyclerView.Adapter< RecyclerViewAdapt
             }
         });
         holder.description_v.setText(u.description);
-    }
+        holder.imageView.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (currentMarker!=null)
+                    currentMarker.setIcon(BitmapDescriptorFactory.fromResource(R.drawable.marker_grey));
 
-    public void removeListener(){
-        if(allPostsRef !=null && usersRefListener!=null)
-            allPostsRef.removeEventListener(usersRefListener);
+                u.m.setIcon(BitmapDescriptorFactory.fromResource(R.drawable.marker_red));
+                currentMarker=u.m;
+                if (itemClickListener!=null)
+                    itemClickListener.onItmeClick(currentMarker.getPosition());
+            }
+        });
     }
     @Override
     public int getItemCount() {
-        return postsList.size();
+        return keyList.size();
     }
     public static class ViewHolder extends RecyclerView.ViewHolder{
         public TextView fname_v;
@@ -223,7 +193,7 @@ public class RecyclerViewAdapter extends RecyclerView.Adapter< RecyclerViewAdapt
 
         DatabaseReference likeCountRef;
         ValueEventListener likeCountRefListener;
-
+        public ImageView profileImage;
         DatabaseReference likesRef;
         ValueEventListener likesRefListener;
         public ViewHolder(View v){
@@ -232,7 +202,8 @@ public class RecyclerViewAdapter extends RecyclerView.Adapter< RecyclerViewAdapt
             email_v = v.findViewById(R.id.email_view);
             phone_v = v.findViewById(R.id.phone_view);
             date_v = v.findViewById(R.id.date_view);
-            description_v=v.findViewById(R.id.description);
+            description_v = v.findViewById(R.id.description);
+            profileImage = v.findViewById(R.id.userImage);
             imageView=v.findViewById(R.id.postImg);
             likeBtn=v.findViewById(R.id.likeBtn);
             likeCount=v.findViewById(R.id.likeCount);

@@ -112,7 +112,10 @@ public class LoginSignup extends AppCompatActivity {
                         }
                         else
                         {
-                            Toast.makeText(LoginSignup.this, "Please verify your email and login again.", Toast.LENGTH_SHORT).show();
+                            // Toast.makeText(LoginSignup.this, "Please verify your email and login again.", Toast.LENGTH_SHORT).show();
+                            Toast.makeText(LoginSignup.this, "Login Successful.", Toast.LENGTH_SHORT).show();
+                            startActivity(new Intent(LoginSignup.this, UserHome.class));
+                            finish();
                         }
                     }
                 }).addOnFailureListener(this, new OnFailureListener() {

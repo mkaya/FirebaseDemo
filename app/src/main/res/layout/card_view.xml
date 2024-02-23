@@ -21,6 +21,12 @@
         android:layout_height="wrap_content"
         android:weightSum="3">
         <ImageView
+            android:id="@+id/userImage"
+            android:layout_width="35dp"
+            android:layout_height="35dp"
+            android:src="@drawable/profile_icon"
+            android:importantForAccessibility="no"/>
+        <ImageView
             android:id="@+id/postImg"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
