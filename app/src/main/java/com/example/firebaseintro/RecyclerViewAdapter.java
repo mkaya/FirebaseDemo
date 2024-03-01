@@ -1,5 +1,8 @@
 package com.example.firebaseintro;
 
+import static com.example.firebaseintro.UserHome.TAG;
+
+import android.net.Uri;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -14,26 +17,27 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.google.android.gms.maps.model.BitmapDescriptorFactory;
 import com.google.android.gms.maps.model.Marker;
+import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
-import com.google.firebase.database.ChildEventListener;
 import com.google.firebase.database.DataSnapshot;
 import com.google.firebase.database.DatabaseError;
 import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
-import com.google.firebase.database.MutableData;
-import com.google.firebase.database.Transaction;
 import com.google.firebase.database.ValueEventListener;
+import com.google.firebase.firestore.DocumentReference;
+import com.google.firebase.firestore.DocumentSnapshot;
+import com.google.firebase.firestore.EventListener;
+import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.firestore.FirebaseFirestoreException;
+import com.google.firebase.storage.FirebaseStorage;
+import com.google.firebase.storage.StorageReference;
 import com.squareup.picasso.Picasso;
 
-import java.text.SimpleDateFormat;
-import java.util.ArrayList;
-import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 
 public class RecyclerViewAdapter extends RecyclerView.Adapter< RecyclerViewAdapter.ViewHolder> {
-    ChildEventListener usersRefListener;
     private final FirebaseUser currentUser;
     private final List<String> keyList;
     private final HashMap<String,PostModel> key_to_Post;
@@ -56,22 +60,11 @@ public class RecyclerViewAdapter extends RecyclerView.Adapter< RecyclerViewAdapt
     }
     @Override
     public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
-        final PostModel u =key_to_Post.get(keyList.get(position));
-        String uid=u.uid;
-        if(holder.uref!=null && holder.urefListener!=null)
-        {
-            holder.uref.removeEventListener(holder.urefListener);
-        }
-        if(holder.likesRef!=null && holder.likesRefListener!=null)
-        {
-            holder.likesRef.removeEventListener(holder.likesRefListener);
-        }
-        if(holder.likeCountRef!=null && holder.likeCountRefListener!=null)
-        {
-            holder.likeCountRef.removeEventListener(holder.likeCountRefListener);
-        }
-        Picasso.get().load(u.url).into(holder.imageView);
         final FirebaseDatabase database = FirebaseDatabase.getInstance();
+        final FirebaseFirestore firestore_db = FirebaseFirestore.getInstance();
+        final PostModel u =key_to_Post.get(keyList.get(position));
+        DocumentReference image_post_ref = firestore_db.collection("ImagePosts").document(u.postKey);
+        String uid = u.uid;
         holder.uref = database.getReference("Users").child(uid);
         holder.uref.addValueEventListener(new ValueEventListener() {
             @Override
@@ -92,71 +85,58 @@ public class RecyclerViewAdapter extends RecyclerView.Adapter< RecyclerViewAdapt
 
             }
         });
-        holder.likeCountRef=
-                database.getReference("ImagePosts/"+u.postKey+"/likeCount");
-        Log.d("LIKEC ", u.postKey);
-        holder.likeCountRefListener = holder.likeCountRef.addValueEventListener(new ValueEventListener() {
-            @Override
-            public void onDataChange(@NonNull DataSnapshot dataSnapshot) {
-                //Log.d("CRASH", dataSnapshot.toString());
-                if(dataSnapshot.getValue()!=null)
-                    holder.likeCount.setText(dataSnapshot.getValue().toString()+" Likes");
-            }
 
+        image_post_ref.addSnapshotListener(new EventListener<DocumentSnapshot>() {
             @Override
-            public void onCancelled(@NonNull DatabaseError databaseError) {
-
-            }
-        });
-        holder.likesRef=database.getReference("ImagePosts/"+u.postKey+"/likes/"+currentUser.getUid());
-        holder.likesRefListener=holder.likesRef.addValueEventListener(new ValueEventListener() {
-            @Override
-            public void onDataChange(@NonNull DataSnapshot dataSnapshot) {
-                if(dataSnapshot.exists() && dataSnapshot.getValue().toString().equals("true"))
-                {
-                    holder.likeBtn.setImageDrawable(ContextCompat.getDrawable(holder.likeBtn.getContext(), R.drawable.like_active));
+            public void onEvent(@Nullable DocumentSnapshot snapshot, @Nullable FirebaseFirestoreException e) {
+                if (e != null) {
+                    Log.w(TAG, "Listen failed.", e);
+                    return;
                 }
-                else{
-                    holder.likeBtn.setImageDrawable(ContextCompat.getDrawable(holder.likeBtn.getContext(), R.drawable.like_disabled));
+                PhotoPreview.Post post = snapshot.toObject(PhotoPreview.Post.class);
+
+                if (post != null) {
+                    StorageReference pathReference = FirebaseStorage.getInstance().getReference("images/"+u.url);
+                    pathReference.getDownloadUrl().addOnSuccessListener(new OnSuccessListener<Uri>() {
+                        @Override
+                        public void onSuccess(Uri uri) {
+                            Picasso.get().load(uri).into(holder.imageView);
+                        }
+                    });
+                    holder.likeCount.setText(String.format("%d Likes", post.likeCount));
+                    if(post.likes.getOrDefault(currentUser.getUid(), false))
+                    {
+                        holder.likeBtn.setImageDrawable(ContextCompat.getDrawable(holder.likeBtn.getContext(), R.drawable.like_active));
+                    }
+                    else{
+                        holder.likeBtn.setImageDrawable(ContextCompat.getDrawable(holder.likeBtn.getContext(), R.drawable.like_disabled));
+                    }
+                } else {
+                    Log.d(TAG, "Current data: null");
                 }
-
-            }
-
-            @Override
-            public void onCancelled(@NonNull DatabaseError databaseError) {
-
             }
         });
         holder.likeBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                database.getReference("ImagePosts/"+u.postKey).runTransaction(new Transaction.Handler() {
-                    @NonNull
+                firestore_db.runTransaction(new com.google.firebase.firestore.Transaction.Function<Void>() {
+                    @Nullable
                     @Override
-                    public Transaction.Result doTransaction(@NonNull MutableData mutableData) {
-                        PhotoPreview.Post p = mutableData.getValue(PhotoPreview.Post.class);
-                        if (p == null) {
-                            return Transaction.success(mutableData);
-                        }
-
-                        if (p.likes.containsKey(currentUser.getUid())) {
+                    public Void apply(@NonNull com.google.firebase.firestore.Transaction transaction) throws FirebaseFirestoreException {
+                        DocumentSnapshot postSnapshot = transaction.get(image_post_ref);
+                        PhotoPreview.Post post = postSnapshot.toObject(PhotoPreview.Post.class);
+                        if (post.likes.containsKey(currentUser.getUid())) {
                             // Unstar the post and remove self from stars
-                            p.likeCount = p.likeCount - 1;
-                            p.likes.remove(currentUser.getUid());
+                            post.likeCount = post.likeCount - 1;
+                            post.likes.remove(currentUser.getUid());
                         } else {
                             // Star the post and add self to stars
-                            p.likeCount = p.likeCount + 1;
-                            p.likes.put(currentUser.getUid(), true);
+                            post.likeCount = post.likeCount + 1;
+                            post.likes.put(currentUser.getUid(), true);
                         }
-
-                        // Set value and report transaction success
-                        mutableData.setValue(p);
-                        return Transaction.success(mutableData);
-                    }
-
-                    @Override
-                    public void onComplete(@Nullable DatabaseError databaseError, boolean b, @Nullable DataSnapshot dataSnapshot) {
-
+                        transaction.update(image_post_ref, "likeCount", post.likeCount);
+                        transaction.update(image_post_ref, "likes", post.likes);
+                        return null;
                     }
                 });
             }
@@ -189,13 +169,8 @@ public class RecyclerViewAdapter extends RecyclerView.Adapter< RecyclerViewAdapt
         public  ImageView likeBtn;
         public TextView likeCount;
         DatabaseReference uref;
-        ValueEventListener urefListener;
-
-        DatabaseReference likeCountRef;
-        ValueEventListener likeCountRefListener;
         public ImageView profileImage;
-        DatabaseReference likesRef;
-        ValueEventListener likesRefListener;
+
         public ViewHolder(View v){
             super(v);
             fname_v = v.findViewById(R.id.fname_view);

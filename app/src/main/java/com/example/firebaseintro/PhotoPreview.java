@@ -26,6 +26,9 @@ import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
 import com.google.firebase.database.ServerValue;
+import com.google.firebase.firestore.DocumentReference;
+import com.google.firebase.firestore.FieldValue;
+import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.storage.FirebaseStorage;
 import com.google.firebase.storage.StorageMetadata;
 import com.google.firebase.storage.StorageReference;
@@ -45,13 +48,13 @@ public class PhotoPreview extends AppCompatActivity {
         public String description;
         public int likeCount = 0;
         public String lat, lng;
-        public Map<String, Boolean> likes = new HashMap<>();
+        public Map<String, Boolean> likes = new HashMap<>();;
 
         public Post(String author, String url, String description, String lat, String Lng) {
             this.uid = author;
             this.url = url;
             this.description = description;
-            this.timestamp = ServerValue.TIMESTAMP;
+            this.timestamp =  FieldValue.serverTimestamp();
             this.lat = lat;
             this.lng = Lng;
         }
@@ -102,8 +105,6 @@ public class PhotoPreview extends AppCompatActivity {
                     REQUEST_FOR_LOCATION);
             return;
         }
-        final DatabaseReference ref = FirebaseDatabase.getInstance().getReference("/geo_loc");
-        final GeoFire geoFire = new GeoFire(ref);
         mFusedLocationClient.getLastLocation().addOnSuccessListener(new OnSuccessListener<Location>() {
             @Override
             public void onSuccess(Location location) {
@@ -113,28 +114,18 @@ public class PhotoPreview extends AppCompatActivity {
                 final StorageReference imageRef = storage.getReference(path);
                 final String lat = String.valueOf(location.getLatitude());
                 final String lng = String.valueOf(location.getLongitude());
-                imageRef.putFile(uri).addOnSuccessListener(new OnSuccessListener<UploadTask.TaskSnapshot>() {
+                final StorageMetadata metadata = new StorageMetadata.Builder()
+                        .setContentType("image/jpg")
+                        .setCustomMetadata("photoLng", lng )
+                        .setCustomMetadata("locationKe","test")
+                        .setCustomMetadata("photoLat", lat)
+                        .setCustomMetadata("uid", currentUser.getUid())
+                        .setCustomMetadata("description", description.getText().toString())
+                        .build();
+                imageRef.putFile(uri,metadata).addOnSuccessListener(new OnSuccessListener<UploadTask.TaskSnapshot>() {
                     @Override
                     public void onSuccess(UploadTask.TaskSnapshot taskSnapshot) {
-                        imageRef.getDownloadUrl().addOnSuccessListener(new OnSuccessListener<Uri>() {
-                            @Override public void onSuccess(final Uri uri) {
-                                final FirebaseDatabase database = FirebaseDatabase.getInstance();
-                                DatabaseReference postsRef = database.getReference("ImagePosts");
-                                final DatabaseReference newPostRef = postsRef.push();
-                                newPostRef.setValue(new Post(currentUser.getUid(),uri.toString(),description.getText().toString(),lat,lng))
-                                        .addOnSuccessListener(new OnSuccessListener<Void>() {
-                                            @Override public void onSuccess(Void aVoid) {
-                                                geoFire.setLocation(newPostRef.getKey(), new GeoLocation(Double.parseDouble(lat),Double.parseDouble(lng)));
-                                                Toast.makeText(PhotoPreview.this, "Success", Toast.LENGTH_SHORT).show();
-                                            }
-                                        });
-                                Toast.makeText(PhotoPreview.this, "Upload completed. Your image will appear shortly.", Toast.LENGTH_SHORT).show();
-                            }
-                        }).addOnFailureListener(new OnFailureListener() {
-                            @Override public void onFailure(@NonNull Exception e) {
-                                Toast.makeText(PhotoPreview.this, e.getMessage(), Toast.LENGTH_SHORT).show();
-                            }
-                        });
+                        Toast.makeText(PhotoPreview.this, "Upload completed. Your image will appear shortly.", Toast.LENGTH_SHORT).show();
 
                     }
                 }).addOnFailureListener(new OnFailureListener() {

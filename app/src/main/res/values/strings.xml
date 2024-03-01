@@ -10,5 +10,5 @@
     <string name="reset_password">Reset Password</string>
     <string name="resend_email_verification">Resend Email Verification</string>
     <string name="_0_likes">0 likes</string>
-    <string name="google_maps_key" templateMergeStrategy="preserve" translatable="false">YOUR API KEY</string>
+    <string name="google_maps_key" templateMergeStrategy="preserve" translatable="false">YOUR-KEY</string>
 </resources>

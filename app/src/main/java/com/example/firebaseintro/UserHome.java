@@ -4,6 +4,7 @@ import androidx.activity.result.ActivityResult;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.FileProvider;
@@ -47,6 +48,10 @@ import com.google.android.gms.maps.model.CameraPosition;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
+import com.google.android.gms.tasks.OnCompleteListener;
+import com.google.android.gms.tasks.OnFailureListener;
+import com.google.android.gms.tasks.OnSuccessListener;
+import com.google.android.gms.tasks.Task;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.database.DataSnapshot;
@@ -54,6 +59,11 @@ import com.google.firebase.database.DatabaseError;
 import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
 import com.google.firebase.database.ValueEventListener;
+import com.google.firebase.firestore.DocumentSnapshot;
+import com.google.firebase.firestore.EventListener;
+import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.firestore.FirebaseFirestoreException;
+import com.google.firebase.firestore.core.FirestoreClient;
 
 import java.io.File;
 import java.io.IOException;
@@ -76,7 +86,8 @@ public class UserHome extends AppCompatActivity implements OnMapReadyCallback, I
     private final Uri imageUri = null;
     private RecyclerViewAdapter myRecyclerAdapter;
     FirebaseDatabase database = FirebaseDatabase.getInstance();
-    private final DatabaseReference geo_fire_ref = database.getReference("/geo_loc");
+    FirebaseFirestore firestore_db = FirebaseFirestore.getInstance();
+    private final DatabaseReference geo_fire_ref = database.getReference("/geofire");
     private final GeoFire geoFire = new GeoFire(geo_fire_ref);
     private GeoQuery geoQuery = null;
     String currentPhotoPath;
@@ -84,6 +95,7 @@ public class UserHome extends AppCompatActivity implements OnMapReadyCallback, I
     private final HashMap<String, PostModel> key_to_Post = new HashMap<>();
     private final List<String> keyList = new ArrayList<>();
     RecyclerView recyclerView;
+    public static String TAG = "FirebaseDemo";
     private final ActivityResultLauncher<Intent> cameraActivityResultLauncher = registerForActivityResult(
             new ActivityResultContracts.StartActivityForResult(), this::onActivityResult);
 
@@ -113,30 +125,33 @@ public class UserHome extends AppCompatActivity implements OnMapReadyCallback, I
                     final String postKey = dataSnapshot.getKey();
                     if (key_to_Post.containsKey(postKey))
                         return;
-                    database.getReference("ImagePosts/" + postKey).addListenerForSingleValueEvent(new ValueEventListener() {
+                    firestore_db.collection("ImagePosts").document(postKey).get().addOnSuccessListener(new OnSuccessListener<DocumentSnapshot>() {
                         @Override
-                        public void onDataChange(@NonNull DataSnapshot dataSnapshot) {
-                            Marker temp = mMap.addMarker(new MarkerOptions().position(new LatLng(Double.parseDouble(dataSnapshot.child("lat").getValue().toString()), Double.parseDouble(dataSnapshot.child("lng").getValue().toString())))
+                        public void onSuccess(DocumentSnapshot documentSnapshot) {
+                            Log.i(TAG, documentSnapshot.toString());
+                            Marker temp = mMap.addMarker(new MarkerOptions().position(
+                                            new LatLng(Double.parseDouble(documentSnapshot.get("lat").toString()),
+                                                    Double.parseDouble(documentSnapshot.get("lng").toString())))
                                     .icon(BitmapDescriptorFactory.fromResource(R.drawable.marker_grey)));
-                            PostModel postModel = new PostModel(dataSnapshot.child("uid").getValue().toString(),
-                                    dataSnapshot.child("description").getValue().toString(),
-                                    dataSnapshot.child("url").getValue().toString(),
-                                    localDateFormat.format(new Date(Long.parseLong(dataSnapshot.child("timestamp").getValue().toString())))
-                                    , dataSnapshot.getKey(), temp);
-                            key_to_Post.put(postKey, postModel);
-                            keyList.add(postKey);
-                            temp.setTag(dataSnapshot.getKey());
+                            PostModel postModel = new PostModel(
+                                    documentSnapshot.get("uid").toString(),
+                                    documentSnapshot.get("description").toString(),
+                                    documentSnapshot.get("url").toString(),
+                                    documentSnapshot.getDate("timestamp").toString(),
+                                    documentSnapshot.getId(),
+                                    temp);
+                            key_to_Post.put(documentSnapshot.getId(), postModel);
+                            keyList.add(documentSnapshot.getId());
+                            temp.setTag(documentSnapshot.getId());
                             myRecyclerAdapter.notifyItemInserted(keyList.size() - 1);
                             recyclerView.scrollToPosition(keyList.size() - 1);
                         }
-
+                    }).addOnFailureListener(new OnFailureListener() {
                         @Override
-                        public void onCancelled(@NonNull DatabaseError databaseError) {
-
+                        public void onFailure(@NonNull Exception e) {
+                            Log.e(TAG, e.getMessage());
                         }
                     });
-
-
                 }
 
                 @Override
@@ -185,17 +200,6 @@ public class UserHome extends AppCompatActivity implements OnMapReadyCallback, I
                 .findFragmentById(R.id.map);
         //mFusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
         mapFragment.getMapAsync(this);
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            // TODO: Consider calling
-            //    ActivityCompat#requestPermissions
-            // here to request the missing permissions, and then overriding
-            //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
-            //                                          int[] grantResults)
-            // to handle the case where the user grants the permission. See the documentation
-            // for ActivityCompat#requestPermissions for more details.
-            return;
-        }
-        mFusedLocationClient.requestLocationUpdates(mLocationRequest, locationCallback, Looper.getMainLooper());
     }
     private void initializeLocationClient() {
         mFusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
@@ -205,14 +209,14 @@ public class UserHome extends AppCompatActivity implements OnMapReadyCallback, I
         long UPDATE_INTERVAL = 10 * 1000;
         /* 2 sec */
         long FASTEST_INTERVAL = 2000;
-        mLocationRequest = new LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, UPDATE_INTERVAL)
+        mLocationRequest = new LocationRequest.Builder(Priority.PRIORITY_BALANCED_POWER_ACCURACY, UPDATE_INTERVAL)
                 .setWaitForAccurateLocation(false)
                 .setMinUpdateIntervalMillis(FASTEST_INTERVAL)
                 .setMaxUpdateDelayMillis(MAX_UPDATE_DELAY_INTERVAL)
                 .build();
-        LocationSettingsRequest.Builder builder = new LocationSettingsRequest.Builder();
-        builder.addLocationRequest(mLocationRequest);
-        LocationSettingsRequest locationSettingsRequest = builder.build();
+        LocationSettingsRequest locationSettingsRequest =  new LocationSettingsRequest.Builder()
+                .addLocationRequest(mLocationRequest)
+                .build();
         SettingsClient settingsClient = LocationServices.getSettingsClient(this);
         settingsClient.checkLocationSettings(locationSettingsRequest);
         locationCallback = new LocationCallback() {
@@ -223,13 +227,23 @@ public class UserHome extends AppCompatActivity implements OnMapReadyCallback, I
                 }
                 Location lastLocation = locationResult.getLastLocation();
 
-                CameraPosition cameraPosition = new CameraPosition.Builder()
-                        .target(new LatLng(lastLocation.getLatitude(), lastLocation.getLongitude())).zoom(12).build();
-                mMap.animateCamera(CameraUpdateFactory.newCameraPosition(cameraPosition));
-
                 newLocation(lastLocation);
             }
         };
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
+                != PackageManager.PERMISSION_GRANTED
+                && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION)
+                != PackageManager.PERMISSION_GRANTED) {
+            // TODO: Consider calling
+            //    ActivityCompat#requestPermissions
+            // here to request the missing permissions, and then overriding
+            //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
+            //                                          int[] grantResults)
+            // to handle the case where the user grants the permission. See the documentation
+            // for ActivityCompat#requestPermissions for more details.
+            return;
+        }
+        mFusedLocationClient.requestLocationUpdates(mLocationRequest, locationCallback, Looper.getMainLooper());
     }
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
@@ -244,22 +258,11 @@ public class UserHome extends AppCompatActivity implements OnMapReadyCallback, I
             mAuth.signOut();
             finish();
             return true;
-        } else if (itemId == R.id.newUser) {
-            createTestEntry();
-            return true;
         } else if (itemId == R.id.edit_profile) {
             startActivity(new Intent(this, EditProfile.class));
             return true;
         }
         return super.onOptionsItemSelected(item);
-    }
-
-    private void createTestEntry() {
-        FirebaseDatabase database = FirebaseDatabase.getInstance();
-        DatabaseReference usersRef = database.getReference("Users");
-        String pushKey = usersRef.push().getKey();
-        usersRef.child(pushKey).setValue(new User("Test Display Name",
-                "Test Email", "Test Phone"));
     }
 
     public void uploadNewPhoto(View view) {
@@ -380,7 +383,6 @@ public class UserHome extends AppCompatActivity implements OnMapReadyCallback, I
     @Override
     public void onMapReady(@NonNull GoogleMap googleMap) {
         mMap = googleMap;
-
         mMap.setOnMarkerClickListener(new GoogleMap.OnMarkerClickListener() {
             @Override
             public boolean onMarkerClick(Marker marker) {
@@ -391,7 +393,6 @@ public class UserHome extends AppCompatActivity implements OnMapReadyCallback, I
                         recyclerView.scrollToPosition(i);
                         break;
                     }
-
                 }
                 //show the image
                 Toast.makeText(UserHome.this, "Marker clicked", Toast.LENGTH_SHORT).show();
@@ -408,9 +409,7 @@ public class UserHome extends AppCompatActivity implements OnMapReadyCallback, I
             return;
         }
         mMap.setMyLocationEnabled(true);
-
     }
-
     @Override
     public void onItmeClick(LatLng latLng) {
         CameraPosition cameraPosition = new CameraPosition.Builder()
